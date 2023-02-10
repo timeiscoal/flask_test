@@ -1,10 +1,7 @@
 from flask import Flask , request , jsonify, current_app
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine , text
-import bcrypt
-import jwt
-import datetime
-from .decorator import login_required
+
 
 # default JSon encoder는 set을 json으로 변환할 수 없다.
 # 그래서 커스텀 엔코더를 작성해서 list로 변환후 json으로
@@ -112,68 +109,23 @@ def create_app(test_config=None):
     @app.route("/sign-up", methods=["POST"])
     def sign_up():
         new_user = request.json
-        new_user["password"] = bcrypt.hashpw(
-            new_user["password"].encode("UTF-8"),
-            bcrypt.gensalt()
-        )
-        new_user_id = app.database.execute(text("""
-        INSERT INTO users(
-            name,
-            email,
-            profile,
-            password
-        )VALUES(
-            :name,
-            :email,
-            :profile,
-            :password
-        )
-        """), new_user).lastrowid
-        new_user_info = get_user(new_user_id)
-        
-        return jsonify(new_user_info)
+        new_user_id = insert_user(new_user)
+        new_user = get_user(new_user_id)
 
-    @app.route("/login", methods=['POST'])
-    def login():
-        credential = request.json
-        email = credential['email']
-        password = credential['password']
-        
-        row = database.execute(text("""
-        SELECT  id,password
-        FROM users
-        WHERE email = :email
-        """), {'email':email}.fetchone())
-
-        if row and bcrypt.checkpw(password.encode('UTF-8'), row["password"].encode('UTF-8')):
-            user_id = row['id']
-            payload = {
-                'user_id':user_id,
-                'exp':datetime.utcnow() + datetime(seconds = 60 * 60 * 24)
-            }
-            token = jwt.encode(payload, app.config['JWT_SECRET_KEY'],'HS256')
-            return jsonify({
-                'access_token' : token.decode("UTF-8")
-            })
-        else:
-            return '', 401
-
+        return jsonify(new_user)
 
     @app.route('/tweet',methods=["POST"])
-    @login_required
     def tweet():
         user_tweet = request.json
-        user_tweet['id'] = g.user_id
-        tweet =user_tweet['tweet']
+        tweet = user_tweet['tweet']
 
         if len(tweet) > 100:
-            return "최대 글자수는 100 미만 입니다." , 400
+            return "최대 글자수는 100 미만 입니다."
 
         insert_tweet(user_tweet)
         return '',200
 
     @app.route("/follow", methods=["POST"])
-    @login_required
     def follow():
         payload = request.json
         insert_follow(payload)
@@ -181,7 +133,6 @@ def create_app(test_config=None):
         return '',200
 
     @app.route("/unfollow",methods=["POST"])
-    @login_required
     def unfollow():
         payload=request.json
         insert_unfollow(payload)
